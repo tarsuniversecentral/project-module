@@ -65,7 +65,6 @@ func (r *ProjectModel) CreateProjectTx(p *dto.Project, lookingForStr string) err
 
 	p.ID = int(lastInsertID)
 
-	// TODO: constract a single insert Query to batch insert
 	// Insert pitch deck file paths if provided.
 	if len(p.PitchDecks) > 0 {
 		if err = r.insertProjectPitchDecksTx(tx, p.ID, p.PitchDecks); err != nil {
@@ -74,7 +73,6 @@ func (r *ProjectModel) CreateProjectTx(p *dto.Project, lookingForStr string) err
 		}
 	}
 
-	// TODO: constract a single insert Query to batch insert
 	// Insert image file paths if provided.
 	if len(p.Images) > 0 {
 		if err = r.insertProjectImagesTx(tx, p.ID, p.Images); err != nil {
@@ -93,21 +91,52 @@ func (r *ProjectModel) CreateProjectTx(p *dto.Project, lookingForStr string) err
 }
 
 func (r *ProjectModel) insertProjectPitchDecksTx(tx *sql.Tx, projectID int, paths []string) error {
-	query := `INSERT INTO project_pitch_decks (project_id, file_path) VALUES (?, ?)`
+	// Return early if there are no paths to insert.
+	if len(paths) == 0 {
+		return nil
+	}
+
+	// Build the INSERT query dynamically.
+	// For each file, we need a placeholder group "(?, ?)".
+	query := "INSERT INTO project_pitch_decks (project_id, file_path) VALUES "
+	placeholders := make([]string, 0, len(paths))
+	values := make([]interface{}, 0, len(paths)*2)
+
 	for _, path := range paths {
-		if _, err := tx.Exec(query, projectID, path); err != nil {
-			return err
-		}
+		placeholders = append(placeholders, "(?, ?)")
+		values = append(values, projectID, path)
+	}
+	query += strings.Join(placeholders, ",")
+
+	// Execute the batch insert.
+	if _, err := tx.Exec(query, values...); err != nil {
+		log.Println("Error batch inserting pitch decks:", err)
+		return err
 	}
 	return nil
 }
 
 func (r *ProjectModel) insertProjectImagesTx(tx *sql.Tx, projectID int, paths []string) error {
-	query := `INSERT INTO project_images (project_id, file_path) VALUES (?, ?)`
+	// Return early if there are no paths to insert.
+	if len(paths) == 0 {
+		return nil
+	}
+
+	// Build the INSERT query dynamically.
+	query := "INSERT INTO project_images (project_id, file_path) VALUES "
+	placeholders := make([]string, 0, len(paths))
+	values := make([]interface{}, 0, len(paths)*2)
+
 	for _, path := range paths {
-		if _, err := tx.Exec(query, projectID, path); err != nil {
-			return err
-		}
+		placeholders = append(placeholders, "(?, ?)")
+		values = append(values, projectID, path)
+	}
+	query += strings.Join(placeholders, ",")
+
+	// Execute the batch insert.
+	if _, err := tx.Exec(query, values...); err != nil {
+		log.Println("Error batch inserting images:", err)
+		return err
 	}
 	return nil
 }

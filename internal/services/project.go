@@ -17,10 +17,6 @@ func NewProjectService(model *model.ProjectModel) *ProjectService {
 
 func (s *ProjectService) CreateProject(project dto.Project) (*dto.Project, error) {
 
-	if err := dto.ValidateLookingFor(project.LookingFor); err != nil {
-		return nil, err
-	}
-
 	lookingForStr := strings.Join(project.LookingFor, ",")
 
 	err := s.model.CreateProjectTx(&project, lookingForStr)

@@ -1,0 +1,8 @@
+
+CREATE TABLE IF NOT EXISTS project_pitch_decks (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    project_id INT NOT NULL,
+    file_path VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);

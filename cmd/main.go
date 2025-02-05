@@ -33,7 +33,7 @@ func main() {
 	// Project routes
 	r.HandleFunc("/projects", projectHandler.CreateProject).Methods("POST")
 	r.HandleFunc("/projects/{id}", projectHandler.GetProject).Methods("GET")
-	// Add more routes as needed
+	r.HandleFunc("/file/{filename}", projectHandler.FileRetrieveHandler).Methods("GET")
 
 	port := os.Getenv("APP_PORT")
 	if port == "" {
