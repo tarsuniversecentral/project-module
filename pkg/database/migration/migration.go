@@ -12,7 +12,7 @@ import (
 
 func RunMigrations(db *sql.DB) error {
 
-	migrationDir := "./migrations"
+	migrationDir := "./pkg/database/migration/migrations"
 	files, err := os.ReadDir(migrationDir)
 	if err != nil {
 		return err

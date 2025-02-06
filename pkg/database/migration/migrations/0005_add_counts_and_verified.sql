@@ -1,0 +1,6 @@
+
+ALTER TABLE projects
+    ADD COLUMN like_count INT DEFAULT 0,
+    ADD COLUMN comment_count INT DEFAULT 0,
+    ADD COLUMN view_count INT DEFAULT 0,
+    ADD COLUMN verified BOOLEAN DEFAULT FALSE;

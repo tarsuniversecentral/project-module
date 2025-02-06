@@ -1,4 +1,4 @@
-package handler
+package handlers
 
 import (
 	"encoding/json"
@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/gorilla/mux"
+	"golang.org/x/exp/rand"
 
 	"github.com/tarsuniversecentral/project-module/internal/dto"
 	service "github.com/tarsuniversecentral/project-module/internal/services"
@@ -103,6 +104,11 @@ func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	project.LikeCount = rand.Intn(100)
+	project.CommentCount = rand.Intn(45)
+	project.ViewCount = rand.Intn(1000)
+	project.Verified = rand.Intn(2) == 1
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(project)
 }
@@ -138,4 +144,92 @@ func (h *ProjectHandler) FileRetrieveHandler(w http.ResponseWriter, r *http.Requ
 	if _, err := io.Copy(w, file); err != nil {
 		http.Error(w, fmt.Sprintf("Error sending file: %v", err), http.StatusInternalServerError)
 	}
+}
+
+func (h *ProjectHandler) AddTeamMemberToProject(w http.ResponseWriter, r *http.Request) {
+
+	vars := mux.Vars(r)
+	projectIdStr := vars["projectId"]
+	projectID, err := strconv.Atoi(projectIdStr)
+	if err != nil {
+		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		return
+	}
+
+	var member dto.TeamMember
+	if err := json.NewDecoder(r.Body).Decode(&member); err != nil {
+		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		return
+	}
+	// Set the project ID from the URL, ensuring consistency.
+	member.ProjectID = projectID
+
+	// Insert the team member into the database.
+	if err := h.projectService.AddTeamMember(&member); err != nil {
+		http.Error(w, "Failed to insert team member", http.StatusInternalServerError)
+		return
+	}
+
+	// Return the inserted team member as a JSON response.
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	if err := json.NewEncoder(w).Encode(member); err != nil {
+		log.Println("Failed to write response:", err)
+	}
+}
+
+func (h *ProjectHandler) GetTeamMembersOfProject(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	projectIdStr := vars["projectId"]
+	projectID, err := strconv.Atoi(projectIdStr)
+	if err != nil {
+		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		return
+	}
+
+	// Retrieve the team members from the database.
+	members, err := h.projectService.GetTeamMembers(projectID)
+	if err != nil {
+		http.Error(w, "Failed to fetch team members", http.StatusInternalServerError)
+		return
+	}
+
+	// Return the team members as a JSON response.
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(members); err != nil {
+		log.Println("Failed to write response:", err)
+	}
+}
+
+func (h *ProjectHandler) UpdateTeamMemberRole(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	memberIDStr := vars["memberId"]
+	memberID, err := strconv.Atoi(memberIDStr)
+	if err != nil {
+		http.Error(w, "Invalid team member ID", http.StatusBadRequest)
+		return
+	}
+
+	var requestBody struct {
+		Role string `json:"role"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if requestBody.Role == "" {
+		http.Error(w, "Role cannot be empty", http.StatusBadRequest)
+		return
+	}
+
+	// Update the role of the team member in the database.
+	err = h.projectService.UpdateTeamMemberRole(memberID, requestBody.Role)
+	if err != nil {
+		http.Error(w, "Failed to update team member role", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent) // Respond with no content on success.
 }

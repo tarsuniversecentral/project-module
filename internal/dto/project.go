@@ -24,6 +24,10 @@ type Project struct {
 	Images       []string     `json:"images,omitempty"`
 	GithubLink   string       `json:"github_link,omitempty"`
 	TeamMembers  []TeamMember `json:"team_members,omitempty"`
+	LikeCount    int          `json:"like_count"`
+	CommentCount int          `json:"comment_count"`
+	ViewCount    int          `json:"view_count"`
+	Verified     bool         `json:"verified"`
 }
 
 type TeamMember struct {

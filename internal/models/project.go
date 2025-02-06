@@ -1,4 +1,4 @@
-package model
+package models
 
 import (
 	"database/sql"
@@ -11,19 +11,19 @@ import (
 )
 
 type ProjectModel struct {
-	DB *sql.DB
+	db *sql.DB
 }
 
 func NewProjectModel(db *sql.DB) *ProjectModel {
-	return &ProjectModel{DB: db}
+	return &ProjectModel{db: db}
 }
 
 // CreateProjectTx wraps the entire project creation process in a transaction.
 // It inserts the main project record and, if provided, inserts the associated
 // pitch deck and image file paths into their respective tables.
-func (r *ProjectModel) CreateProjectTx(p *dto.Project, lookingForStr string) error {
+func (m *ProjectModel) CreateProjectTx(p *dto.Project, lookingForStr string) error {
 	// Begin the transaction.
-	tx, err := r.DB.Begin()
+	tx, err := m.db.Begin()
 	if err != nil {
 		return err
 	}
@@ -67,7 +67,7 @@ func (r *ProjectModel) CreateProjectTx(p *dto.Project, lookingForStr string) err
 
 	// Insert pitch deck file paths if provided.
 	if len(p.PitchDecks) > 0 {
-		if err = r.insertProjectPitchDecksTx(tx, p.ID, p.PitchDecks); err != nil {
+		if err = m.insertProjectPitchDecksTx(tx, p.ID, p.PitchDecks); err != nil {
 			rollback(tx)
 			return err
 		}
@@ -75,7 +75,7 @@ func (r *ProjectModel) CreateProjectTx(p *dto.Project, lookingForStr string) err
 
 	// Insert image file paths if provided.
 	if len(p.Images) > 0 {
-		if err = r.insertProjectImagesTx(tx, p.ID, p.Images); err != nil {
+		if err = m.insertProjectImagesTx(tx, p.ID, p.Images); err != nil {
 			rollback(tx)
 			return err
 		}
@@ -90,7 +90,7 @@ func (r *ProjectModel) CreateProjectTx(p *dto.Project, lookingForStr string) err
 	return nil
 }
 
-func (r *ProjectModel) insertProjectPitchDecksTx(tx *sql.Tx, projectID int, paths []string) error {
+func (m *ProjectModel) insertProjectPitchDecksTx(tx *sql.Tx, projectID int, paths []string) error {
 	// Return early if there are no paths to insert.
 	if len(paths) == 0 {
 		return nil
@@ -116,7 +116,7 @@ func (r *ProjectModel) insertProjectPitchDecksTx(tx *sql.Tx, projectID int, path
 	return nil
 }
 
-func (r *ProjectModel) insertProjectImagesTx(tx *sql.Tx, projectID int, paths []string) error {
+func (m *ProjectModel) insertProjectImagesTx(tx *sql.Tx, projectID int, paths []string) error {
 	// Return early if there are no paths to insert.
 	if len(paths) == 0 {
 		return nil
@@ -141,8 +141,8 @@ func (r *ProjectModel) insertProjectImagesTx(tx *sql.Tx, projectID int, paths []
 	return nil
 }
 
-func (r *ProjectModel) GetProjects() ([]dto.Project, error) {
-	rows, err := r.DB.Query(`SELECT id, title, subtitle, industry, description, project_value, looking_for FROM projects`)
+func (m *ProjectModel) GetProjects() ([]dto.Project, error) {
+	rows, err := m.db.Query(`SELECT id, title, subtitle, industry, description, project_value, looking_for FROM projects`)
 	if err != nil {
 		return nil, err
 	}
@@ -159,11 +159,11 @@ func (r *ProjectModel) GetProjects() ([]dto.Project, error) {
 	return projects, nil
 }
 
-func (r *ProjectModel) GetProjectByID(id int) (*dto.Project, error) {
+func (m *ProjectModel) GetProjectByID(id int) (*dto.Project, error) {
 	var p dto.Project
 
 	// Query to select the project by its ID
-	row := r.DB.QueryRow(`
+	row := m.db.QueryRow(`
 		SELECT id, title, subtitle, industry, description, project_value, looking_for
 		FROM projects
 		WHERE id = ?
@@ -210,7 +210,7 @@ func (m *ProjectModel) GetProjectFullDetails(id int) (*dto.Project, error) {
 		WHERE p.id = ?
 	`
 
-	rows, err := m.DB.Query(query, id)
+	rows, err := m.db.Query(query, id)
 	if err != nil {
 		return nil, fmt.Errorf("query error: %w", err)
 	}
@@ -293,7 +293,7 @@ func (m *ProjectModel) GetProjectFullDetails(id int) (*dto.Project, error) {
 
 	// Now, query for pitch deck file paths.
 	pitchQuery := `SELECT file_path FROM project_pitch_decks WHERE project_id = ?`
-	pitchRows, err := m.DB.Query(pitchQuery, id)
+	pitchRows, err := m.db.Query(pitchQuery, id)
 	if err != nil {
 		return nil, fmt.Errorf("query pitch decks error: %w", err)
 	}
@@ -312,7 +312,7 @@ func (m *ProjectModel) GetProjectFullDetails(id int) (*dto.Project, error) {
 
 	// Similarly, query for image file paths.
 	imageQuery := `SELECT file_path FROM project_images WHERE project_id = ?`
-	imageRows, err := m.DB.Query(imageQuery, id)
+	imageRows, err := m.db.Query(imageQuery, id)
 	if err != nil {
 		return nil, fmt.Errorf("query images error: %w", err)
 	}
@@ -350,4 +350,110 @@ func splitAndTrim(s, delim string) []string {
 		}
 	}
 	return result
+}
+
+func (m *ProjectModel) InsertTeamMember(member *dto.TeamMember) error {
+	query := `
+		INSERT INTO team_members (
+			project_id, profile_url, title, role
+		)
+		VALUES (?, ?, ?, ?)`
+	result, err := m.db.Exec(query, member.ProjectID, member.ProfileURL, member.Title, member.Role)
+	if err != nil {
+		log.Println("Error inserting team member:", err)
+		return err
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
+	member.ID = int(id)
+	return nil
+}
+
+func (m *ProjectModel) GetTeamMembers(projectID int) ([]*dto.TeamMember, error) {
+	query := `
+		SELECT 
+			id, 
+			project_id, 
+			profile_url, 
+			title, 
+			role
+		FROM team_members
+		WHERE project_id = ?`
+
+	// Execute the query
+	rows, err := m.db.Query(query, projectID)
+	if err != nil {
+		log.Println("Error querying team members:", err)
+		return nil, fmt.Errorf("failed to query team members: %w", err)
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Println("Error closing rows:", err)
+		}
+	}()
+
+	var members []*dto.TeamMember
+
+	// Iterate through the rows
+	for rows.Next() {
+		member := &dto.TeamMember{}
+		if err := rows.Scan(
+			&member.ID,
+			&member.ProjectID,
+			&member.ProfileURL,
+			&member.Title,
+			&member.Role,
+		); err != nil {
+			log.Println("Error scanning row:", err)
+			return nil, fmt.Errorf("failed to scan team member: %w", err)
+		}
+		members = append(members, member)
+	}
+
+	// Check for errors after iteration
+	if err := rows.Err(); err != nil {
+		log.Println("Error after iterating rows:", err)
+		return nil, fmt.Errorf("row iteration error: %w", err)
+	}
+
+	return members, nil
+}
+
+func (m *ProjectModel) ProjectExists(projectID int) (bool, error) {
+	query := `SELECT EXISTS(SELECT 1 FROM projects WHERE id = ?)`
+
+	var exists bool
+	err := m.db.QueryRow(query, projectID).Scan(&exists)
+	if err != nil {
+		log.Println("Error checking if project exists:", err)
+		return false, fmt.Errorf("failed to check if project exists: %w", err)
+	}
+
+	return exists, nil
+}
+
+func (m *ProjectModel) UpdateTeamMemberRole(id int, role string) error {
+	query := `
+        UPDATE team_members
+        SET role = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?`
+
+	result, err := m.db.Exec(query, role, id)
+	if err != nil {
+		log.Println("Error updating team member role:", err)
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return errors.New("no rows affected, possibly invalid team member ID")
+	}
+
+	return nil
 }
